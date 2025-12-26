@@ -34,8 +34,8 @@ All the above tools are present in dockerfile.
 
 # Execution
 
-- `git clone <repo>`
-- `cd <repo_name>`
+- `git clone https://github.com/Sathish-30/metagenomics.git`
+- `cd metagenomics`
 - `docker build -t metagenomics .`
 - `docker run --rm -it metagenomics:latest bash`
 - `apt-get install -y seqkit parallel vim`
