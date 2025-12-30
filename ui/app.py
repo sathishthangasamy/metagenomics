@@ -32,11 +32,11 @@ class MetagenomicsUI:
     
     def create_ui(self):
         """Create and return the Gradio interface."""
-        with gr.Blocks(
-            theme=get_theme(),
-            title="Metagenomics Pipeline on GCP",
-            css=self._get_custom_css()
-        ) as demo:
+        # Store theme and CSS for launch
+        self.theme = get_theme()
+        self.custom_css = self._get_custom_css()
+        
+        with gr.Blocks() as demo:
             # Header
             gr.Markdown(
                 """
@@ -510,7 +510,9 @@ def main():
     demo.launch(
         server_name=config.GRADIO_SERVER_NAME,
         server_port=config.GRADIO_SERVER_PORT,
-        share=config.GRADIO_SHARE
+        share=config.GRADIO_SHARE,
+        theme=app.theme,
+        css=app.custom_css
     )
 
 
