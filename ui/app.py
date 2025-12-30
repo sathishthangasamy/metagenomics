@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ui.theme import get_theme
-from gcp.storage import StorageHandler
+from gcp.storage import StorageHandler, validate_paired_files, format_file_size
 from gcp.launcher import VMLauncher
 from gcp.monitor import JobMonitor
 import config
@@ -29,6 +29,7 @@ class MetagenomicsUI:
         self.current_job_id = None
         self.current_instance_name = None
         self.job_start_time = None
+        self.gcs_file_mapping = {}  # Maps display names to GCS paths
     
     def create_ui(self):
         """Create and return the Gradio interface."""
@@ -57,21 +58,59 @@ class MetagenomicsUI:
                 with gr.Tab("📤 Upload & Configure"):
                     with gr.Row():
                         with gr.Column(scale=1):
-                            gr.Markdown("### Sample Files")
-                            gr.Markdown("Upload paired-end FASTQ files (.fq.gz or .fastq.gz)")
+                            gr.Markdown("### Sample Input")
                             
-                            file1 = gr.File(
-                                label="📁 Forward Reads (R1)",
-                                file_types=[".fq.gz", ".fastq.gz"],
-                                type="filepath"
-                            )
-                            file2 = gr.File(
-                                label="📁 Reverse Reads (R2)",
-                                file_types=[".fq.gz", ".fastq.gz"],
-                                type="filepath"
+                            # Input method selection
+                            input_method = gr.Radio(
+                                choices=["Upload from computer", "Select from Google Cloud Storage"],
+                                value="Upload from computer",
+                                label="📂 Input Method"
                             )
                             
-                            upload_status = gr.Markdown("", elem_classes="upload-status")
+                            # Upload section (shown by default)
+                            with gr.Group(visible=True) as upload_section:
+                                gr.Markdown("Upload paired-end FASTQ files (.fq.gz or .fastq.gz)")
+                                
+                                file1 = gr.File(
+                                    label="📁 Forward Reads (R1)",
+                                    file_types=[".fq.gz", ".fastq.gz"],
+                                    type="filepath"
+                                )
+                                file2 = gr.File(
+                                    label="📁 Reverse Reads (R2)",
+                                    file_types=[".fq.gz", ".fastq.gz"],
+                                    type="filepath"
+                                )
+                                
+                                upload_status = gr.Markdown("", elem_classes="upload-status")
+                            
+                            # GCS Browser section (hidden by default)
+                            with gr.Group(visible=False) as gcs_section:
+                                gr.Markdown("Select files from Google Cloud Storage")
+                                
+                                with gr.Row():
+                                    gcs_bucket = gr.Textbox(
+                                        label="🪣 Bucket Name",
+                                        value=config.GCS_BROWSER_DEFAULT_BUCKET or config.GCP_BUCKET_NAME,
+                                        placeholder="my-metagenomics-bucket"
+                                    )
+                                
+                                with gr.Row():
+                                    gcs_prefix = gr.Textbox(
+                                        label="📂 Path/Prefix",
+                                        value=config.GCS_BROWSER_DEFAULT_PREFIX,
+                                        placeholder="samples/"
+                                    )
+                                    gcs_refresh_btn = gr.Button("🔄 Refresh", size="sm", scale=0)
+                                
+                                gcs_files = gr.CheckboxGroup(
+                                    label="Available Files",
+                                    choices=[],
+                                    value=[],
+                                    interactive=True
+                                )
+                                
+                                gcs_status = gr.Markdown("", elem_classes="upload-status")
                         
                         with gr.Column(scale=1):
                             gr.Markdown("### Pipeline Configuration")
@@ -153,6 +192,20 @@ class MetagenomicsUI:
             
             # Event handlers
             
+            # Input method toggle
+            input_method.change(
+                fn=self._toggle_input_method,
+                inputs=[input_method],
+                outputs=[upload_section, gcs_section, upload_status, gcs_status]
+            )
+            
+            # GCS refresh button
+            gcs_refresh_btn.click(
+                fn=self._refresh_gcs_files,
+                inputs=[gcs_bucket, gcs_prefix],
+                outputs=[gcs_files, gcs_status]
+            )
+            
             # File upload handlers
             file1.change(
                 fn=self._validate_file,
@@ -170,7 +223,9 @@ class MetagenomicsUI:
             launch_btn.click(
                 fn=self._launch_pipeline,
                 inputs=[
-                    file1, file2, threads, min_contig_len,
+                    input_method, file1, file2, 
+                    gcs_bucket, gcs_prefix, gcs_files,
+                    threads, min_contig_len,
                     *step_checkboxes.values()
                 ],
                 outputs=[launch_output, launch_btn, cancel_btn]
@@ -220,22 +275,115 @@ class MetagenomicsUI:
         
         return f"✅ File uploaded: {file_path.name} ({size_mb:.1f} MB)"
     
+    def _toggle_input_method(self, method: str) -> Tuple[gr.Group, gr.Group, str, str]:
+        """Toggle between upload and GCS input methods."""
+        if method == "Upload from computer":
+            return (
+                gr.Group(visible=True),   # upload_section
+                gr.Group(visible=False),  # gcs_section
+                "",  # upload_status
+                ""   # gcs_status
+            )
+        else:
+            return (
+                gr.Group(visible=False),  # upload_section
+                gr.Group(visible=True),   # gcs_section
+                "",  # upload_status
+                ""   # gcs_status
+            )
+    
+    def _refresh_gcs_files(self, bucket: str, prefix: str) -> Tuple[gr.CheckboxGroup, str]:
+        """Refresh the list of files from GCS."""
+        if not bucket:
+            return (
+                gr.CheckboxGroup(choices=[], value=[]),
+                "❌ Please enter a bucket name"
+            )
+        
+        try:
+            # List files from GCS
+            files = self.storage.list_gcs_files(
+                bucket_name=bucket,
+                prefix=prefix,
+                file_extensions=config.GCS_ALLOWED_EXTENSIONS
+            )
+            
+            if not files:
+                return (
+                    gr.CheckboxGroup(choices=[], value=[]),
+                    f"ℹ️ No FASTQ files found in gs://{bucket}/{prefix}"
+                )
+            
+            # Create choices with file names and sizes
+            choices = [f"{f['name']} ({f['size_human_readable']})" for f in files]
+            
+            # Store the mapping for later use
+            self.gcs_file_mapping = {
+                f"{f['name']} ({f['size_human_readable']})": f['path']
+                for f in files
+            }
+            
+            return (
+                gr.CheckboxGroup(choices=choices, value=[]),
+                f"✅ Found {len(files)} file(s) in gs://{bucket}/{prefix}"
+            )
+        
+        except Exception as e:
+            return (
+                gr.CheckboxGroup(choices=[], value=[]),
+                f"❌ Error listing files: {str(e)}"
+            )
+    
     def _launch_pipeline(
         self,
+        input_method,
         file1,
         file2,
+        gcs_bucket,
+        gcs_prefix,
+        gcs_files,
         threads,
         min_contig_len,
         *step_flags
     ) -> Tuple[str, gr.Button, gr.Button]:
         """Launch the pipeline on GCP."""
-        # Validate inputs
-        if file1 is None or file2 is None:
-            return (
-                "❌ Please upload both forward and reverse read files.",
-                gr.Button(visible=True),
-                gr.Button(visible=False)
-            )
+        # Validate inputs based on method
+        gcs_uri1 = None
+        gcs_uri2 = None
+        
+        if input_method == "Upload from computer":
+            # Validate uploaded files
+            if file1 is None or file2 is None:
+                return (
+                    "❌ Please upload both forward and reverse read files.",
+                    gr.Button(visible=True),
+                    gr.Button(visible=False)
+                )
+        else:
+            # Validate GCS selections
+            if not gcs_files or len(gcs_files) == 0:
+                return (
+                    "❌ Please select files from Google Cloud Storage.",
+                    gr.Button(visible=True),
+                    gr.Button(visible=False)
+                )
+            
+            # Get actual file paths from mapping
+            selected_paths = [self.gcs_file_mapping.get(f, f) for f in gcs_files]
+            
+            # Validate paired files
+            is_valid, forward_file, reverse_file, error_msg = validate_paired_files(selected_paths)
+            
+            if not is_valid:
+                return (
+                    f"❌ {error_msg}",
+                    gr.Button(visible=True),
+                    gr.Button(visible=False)
+                )
+            
+            # Build GCS URIs
+            gcs_uri1 = f"gs://{gcs_bucket}/{forward_file}"
+            gcs_uri2 = f"gs://{gcs_bucket}/{reverse_file}"
         
         if not config.GCP_PROJECT_ID or not config.GCP_BUCKET_NAME:
             return (
@@ -250,19 +398,22 @@ class MetagenomicsUI:
             self.current_instance_name = f"pipeline-{self.current_job_id}"
             self.job_start_time = datetime.now()
             
-            # Upload files to GCS
-            blob1 = f"inputs/{self.current_job_id}/CV_1.fq.gz"
-            blob2 = f"inputs/{self.current_job_id}/CV_2.fq.gz"
-            
-            gcs_uri1 = self.storage.upload_file(file1, blob1)
-            gcs_uri2 = self.storage.upload_file(file2, blob2)
-            
-            if not gcs_uri1 or not gcs_uri2:
-                return (
-                    "❌ Failed to upload files to GCS.",
-                    gr.Button(visible=True),
-                    gr.Button(visible=False)
-                )
+            # Handle file inputs based on method
+            if input_method == "Upload from computer":
+                # Upload files to GCS (existing flow)
+                blob1 = f"inputs/{self.current_job_id}/CV_1.fq.gz"
+                blob2 = f"inputs/{self.current_job_id}/CV_2.fq.gz"
+                
+                gcs_uri1 = self.storage.upload_file(file1, blob1)
+                gcs_uri2 = self.storage.upload_file(file2, blob2)
+                
+                if not gcs_uri1 or not gcs_uri2:
+                    return (
+                        "❌ Failed to upload files to GCS.",
+                        gr.Button(visible=True),
+                        gr.Button(visible=False)
+                    )
+            # else: gcs_uri1 and gcs_uri2 are already set from GCS selection
             
             # Build enabled steps dictionary
             enabled_steps = {}
@@ -295,11 +446,15 @@ class MetagenomicsUI:
                     gr.Button(visible=False)
                 )
             
+            input_source = "uploaded files" if input_method == "Upload from computer" else "GCS files"
+            
             return (
                 f"✅ **Pipeline launched successfully!**\n\n"
                 f"- **Job ID:** `{self.current_job_id}`\n"
                 f"- **VM Instance:** `{instance_name}`\n"
-                f"- **Machine Type:** `{machine_type}`\n\n"
+                f"- **Machine Type:** `{machine_type}`\n"
+                f"- **Input Source:** {input_source}\n"
+                f"- **Input Files:** `{gcs_uri1}`, `{gcs_uri2}`\n\n"
                 f"Switch to the **Monitor Progress** tab to track the pipeline.",
                 gr.Button(visible=False),
                 gr.Button(visible=True)
