@@ -12,6 +12,9 @@ GCP_BUCKET_NAME = os.getenv("GCP_BUCKET_NAME", "")
 GCP_ZONE = os.getenv("GCP_ZONE", "us-central1-a")
 GCP_SERVICE_ACCOUNT_KEY = os.getenv("GCP_SERVICE_ACCOUNT_KEY", "")
 
+# Repository Configuration
+REPOSITORY_URL = os.getenv("REPOSITORY_URL", "https://github.com/sathishthangasamy/metagenomics.git")
+
 # VM Configuration
 VM_CONFIGS = {
     "standard": {

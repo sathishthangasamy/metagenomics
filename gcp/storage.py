@@ -1,6 +1,7 @@
 """Google Cloud Storage handler for uploading and downloading files."""
 import os
 import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional, Callable
 from google.cloud import storage
@@ -171,7 +172,7 @@ class StorageHandler:
             
             url = blob.generate_signed_url(
                 version="v4",
-                expiration=time.timedelta(minutes=expiration_minutes),
+                expiration=timedelta(minutes=expiration_minutes),
                 method="GET",
             )
             

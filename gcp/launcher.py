@@ -259,7 +259,7 @@ systemctl enable docker
 
 # Clone the repository
 cd /home
-git clone https://github.com/sathishthangasamy/metagenomics.git
+git clone {config.REPOSITORY_URL}
 cd metagenomics
 
 # Build Docker image
