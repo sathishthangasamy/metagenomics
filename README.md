@@ -1,5 +1,9 @@
+# 🧬 Metagenomics Analysis Pipeline
+
+A comprehensive metagenomics pipeline with a modern web UI for analyzing metagenomic samples on Google Cloud Platform.
 
 ## Required Tools
+
 
 - [x] Fastqc & Multiqc
 - [x] Trimmomatic
@@ -32,7 +36,134 @@ All the above tools are present in dockerfile.
 * Extract same Ids from .faa file.
 * Use .faa filter with pfam annotation.
 
-# Execution
+# 🚀 Web UI (New!)
+
+We now offer a modern, user-friendly web interface powered by Gradio that allows you to run the entire metagenomics pipeline on Google Cloud Platform without manual command-line operations.
+
+## Features
+
+- **🎨 Futuristic Light Theme** - Clean, modern interface
+- **📤 Easy File Upload** - Drag & drop your FASTQ files
+- **⚙️ Configurable Pipeline** - Enable/disable steps, adjust parameters
+- **☁️ Cloud-Powered** - Runs on Google Cloud Platform VMs
+- **📊 Real-time Monitoring** - Track pipeline progress live
+- **💰 Cost Tracking** - See estimated costs in real-time
+- **📥 Easy Results Download** - Download all results with one click
+
+## Quick Start
+
+### 1. Set Up GCP Credentials
+
+1. Create a GCP project at [console.cloud.google.com](https://console.cloud.google.com)
+2. Enable the following APIs:
+   - Compute Engine API
+   - Cloud Storage API
+3. Create a service account with the following roles:
+   - Compute Admin
+   - Storage Admin
+4. Download the service account key JSON file
+5. Create a Cloud Storage bucket for storing data
+
+### 2. Configure Environment
+
+Copy the example environment file and fill in your details:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your GCP credentials:
+
+```
+GCP_PROJECT_ID=your-project-id
+GCP_BUCKET_NAME=your-metagenomics-bucket
+GCP_ZONE=us-central1-a
+GCP_SERVICE_ACCOUNT_KEY=path/to/service-account-key.json
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Run the Web UI
+
+```bash
+python ui/app.py
+```
+
+The web interface will be available at `http://localhost:7860`
+
+## Using the Web UI
+
+1. **Upload Samples**: Upload your paired-end FASTQ files (.fq.gz or .fastq.gz)
+2. **Configure Pipeline**: Adjust thread count, minimum contig length, and select pipeline steps
+3. **Launch**: Click "🚀 Launch Pipeline" to start the analysis on GCP
+4. **Monitor**: Switch to the "Monitor Progress" tab to track the pipeline
+5. **Download Results**: Once complete, download results from the "Results" tab
+
+## Deploy to Hugging Face Spaces (Free Hosting)
+
+You can deploy this UI to Hugging Face Spaces for free:
+
+1. Create an account at [huggingface.co](https://huggingface.co)
+2. Create a new Space with Gradio SDK
+3. Upload all files from this repository
+4. Add your GCP credentials as Space secrets:
+   - `GCP_PROJECT_ID`
+   - `GCP_BUCKET_NAME`
+   - `GCP_ZONE`
+   - `GCP_SERVICE_ACCOUNT_KEY` (paste the JSON content)
+5. The app will automatically launch!
+
+## Cost Estimates
+
+Running the pipeline on GCP with preemptible VMs:
+
+- **Small samples (< 5GB)**: $0.50 - $2.00 per run
+- **Medium samples (5-15GB)**: $2.00 - $5.00 per run
+- **Large samples (15-30GB)**: $5.00 - $15.00 per run
+
+Costs include:
+- Compute Engine (preemptible VMs)
+- Cloud Storage (data storage and transfer)
+
+## Supported File Formats
+
+- Forward reads: `.fq.gz` or `.fastq.gz`
+- Reverse reads: `.fq.gz` or `.fastq.gz`
+- Maximum file size: 30GB per file
+
+## Pipeline Steps
+
+The web UI supports the following pipeline steps:
+
+1. **FastQC** - Quality control on raw reads
+2. **Trimmomatic** - Adapter trimming and quality filtering
+3. **MEGAHIT** - Metagenomic assembly
+4. **Prodigal** - Gene prediction
+5. **HMMscan (Pfam)** - Protein domain annotation
+6. **MetaBAT2** - Genome binning
+7. **CheckM** - Bin quality assessment
+
+## Results
+
+After completion, you can download:
+
+- MultiQC Report (HTML)
+- Assembled Contigs (FASTA)
+- Predicted Genes (FAA, FNA, GFF)
+- Pfam Annotations
+- Genome Bins
+- CheckM Quality Report
+- All results as a ZIP file
+
+---
+
+# Manual Execution (Docker)
+
+If you prefer to run the pipeline manually using Docker:
 
 - `git clone https://github.com/Sathish-30/metagenomics.git`
 - `cd metagenomics`
