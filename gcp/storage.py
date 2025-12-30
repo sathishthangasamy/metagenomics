@@ -223,3 +223,203 @@ class StorageHandler:
         except Exception as e:
             print(f"Error deleting blob: {e}")
             return False
+    
+    def list_gcs_files(
+        self,
+        bucket_name: str,
+        prefix: str = "",
+        file_extensions: list = None
+    ) -> list:
+        """
+        List files in a GCS bucket matching the given extensions.
+        
+        Args:
+            bucket_name: Name of the GCS bucket
+            prefix: Prefix to filter files (e.g., 'samples/')
+            file_extensions: List of file extensions to filter (e.g., ['.fq.gz', '.fastq.gz'])
+            
+        Returns:
+            List of dicts with: name, path, size, size_human_readable
+        """
+        if file_extensions is None:
+            file_extensions = [".fq.gz", ".fastq.gz"]
+        
+        files = []
+        
+        try:
+            # Get the bucket
+            if bucket_name and bucket_name != self.bucket_name:
+                bucket = self.client.bucket(bucket_name)
+            elif self.bucket:
+                bucket = self.bucket
+            else:
+                print("Error: No bucket available")
+                return []
+            
+            # List blobs with prefix
+            blobs = bucket.list_blobs(prefix=prefix)
+            
+            for blob in blobs:
+                # Skip directories
+                if blob.name.endswith('/'):
+                    continue
+                
+                # Check if file matches any of the extensions
+                if any(blob.name.endswith(ext) for ext in file_extensions):
+                    files.append({
+                        'name': blob.name.split('/')[-1],
+                        'path': blob.name,
+                        'size': blob.size,
+                        'size_human_readable': format_file_size(blob.size)
+                    })
+        
+        except Exception as e:
+            print(f"Error listing GCS files: {e}")
+        
+        return files
+    
+    def get_gcs_file_info(self, bucket_name: str, file_path: str) -> dict:
+        """
+        Get metadata for a specific file in GCS.
+        
+        Args:
+            bucket_name: Name of the GCS bucket
+            file_path: Full path to the file in the bucket
+            
+        Returns:
+            Dict with: name, path, size, size_human_readable, created, updated
+        """
+        try:
+            # Get the bucket
+            if bucket_name and bucket_name != self.bucket_name:
+                bucket = self.client.bucket(bucket_name)
+            elif self.bucket:
+                bucket = self.bucket
+            else:
+                print("Error: No bucket available")
+                return {}
+            
+            # Get blob
+            blob = bucket.blob(file_path)
+            
+            if not blob.exists():
+                print(f"Error: File not found: {file_path}")
+                return {}
+            
+            # Reload to get latest metadata
+            blob.reload()
+            
+            return {
+                'name': blob.name.split('/')[-1],
+                'path': blob.name,
+                'size': blob.size,
+                'size_human_readable': format_file_size(blob.size),
+                'created': blob.time_created,
+                'updated': blob.updated
+            }
+        
+        except Exception as e:
+            print(f"Error getting file info: {e}")
+            return {}
+
+
+def validate_paired_files(file_list: list) -> tuple:
+    """
+    Validate that selected files are proper paired-end reads.
+    
+    Args:
+        file_list: List of file paths or names
+        
+    Returns:
+        (is_valid, forward_file, reverse_file, error_message)
+    """
+    if not file_list or len(file_list) == 0:
+        return (False, None, None, "No files selected")
+    
+    if len(file_list) == 1:
+        return (False, None, None, "Please select both forward and reverse read files (R1 and R2)")
+    
+    if len(file_list) > 2:
+        return (False, None, None, "Please select exactly 2 files (forward and reverse reads)")
+    
+    # Sort files to ensure consistent ordering
+    sorted_files = sorted(file_list)
+    
+    # Check for common paired-end naming patterns
+    # Patterns: _R1/_R2, _1/_2, .R1./.R2., .1./.2.
+    file1, file2 = sorted_files[0], sorted_files[1]
+    
+    # Extract base names without extensions
+    base1 = file1.replace('.fq.gz', '').replace('.fastq.gz', '').replace('.fq', '').replace('.fastq', '')
+    base2 = file2.replace('.fq.gz', '').replace('.fastq.gz', '').replace('.fq', '').replace('.fastq', '')
+    
+    # Check various paired-end patterns
+    patterns_valid = False
+    
+    # Pattern 1: _R1 / _R2
+    if (base1.endswith('_R1') or base1.endswith('_1')) and (base2.endswith('_R2') or base2.endswith('_2')):
+        base1_prefix = base1.rsplit('_', 1)[0]
+        base2_prefix = base2.rsplit('_', 1)[0]
+        if base1_prefix == base2_prefix:
+            patterns_valid = True
+    
+    # Pattern 2: .R1. / .R2.
+    elif '_1.' in file1 and '_2.' in file2:
+        base1_prefix = file1.split('_1.')[0]
+        base2_prefix = file2.split('_2.')[0]
+        if base1_prefix == base2_prefix:
+            patterns_valid = True
+    
+    # Pattern 3: .1. / .2.
+    elif '.1.' in file1 and '.2.' in file2:
+        base1_prefix = file1.split('.1.')[0]
+        base2_prefix = file2.split('.2.')[0]
+        if base1_prefix == base2_prefix:
+            patterns_valid = True
+    
+    if not patterns_valid:
+        return (
+            False,
+            None,
+            None,
+            "Selected files do not appear to be paired reads. Expected naming: *_R1/*_R2 or *_1/*_2"
+        )
+    
+    # Determine which is forward and which is reverse
+    if '_R1' in file1 or '_1' in file1 or '.1.' in file1:
+        forward_file = file1
+        reverse_file = file2
+    else:
+        forward_file = file2
+        reverse_file = file1
+    
+    return (True, forward_file, reverse_file, "")
+
+
+def format_file_size(size_bytes: int) -> str:
+    """
+    Convert bytes to human readable format (e.g., "25.1 GB").
+    
+    Args:
+        size_bytes: File size in bytes
+        
+    Returns:
+        Human-readable file size string
+    """
+    if size_bytes is None:
+        return "Unknown"
+    
+    # Define size units
+    units = ['B', 'KB', 'MB', 'GB', 'TB']
+    size = float(size_bytes)
+    unit_index = 0
+    
+    while size >= 1024.0 and unit_index < len(units) - 1:
+        size /= 1024.0
+        unit_index += 1
+    
+    # Format with appropriate decimal places
+    if unit_index == 0:  # Bytes
+        return f"{int(size)} {units[unit_index]}"
+    else:
+        return f"{size:.1f} {units[unit_index]}"
