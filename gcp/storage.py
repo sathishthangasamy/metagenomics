@@ -354,15 +354,15 @@ def validate_paired_files(file_list: list) -> tuple:
     forward_file = None
     reverse_file = None
     
-    # Pattern 1: _R1 / _R2 or _1 / _2
-    if (base1.endswith('_R1') or base1.endswith('_1')) and (base2.endswith('_R2') or base2.endswith('_2')):
+    # Pattern 1: _R1 / _R2 (check for exact _R1/_R2 first, more specific)
+    if (base1.endswith('_R1') and base2.endswith('_R2')):
         base1_prefix = base1.rsplit('_', 1)[0]
         base2_prefix = base2.rsplit('_', 1)[0]
         if base1_prefix == base2_prefix:
             patterns_valid = True
             forward_file = file1
             reverse_file = file2
-    elif (base2.endswith('_R1') or base2.endswith('_1')) and (base1.endswith('_R2') or base1.endswith('_2')):
+    elif (base2.endswith('_R1') and base1.endswith('_R2')):
         base1_prefix = base1.rsplit('_', 1)[0]
         base2_prefix = base2.rsplit('_', 1)[0]
         if base1_prefix == base2_prefix:
@@ -370,7 +370,23 @@ def validate_paired_files(file_list: list) -> tuple:
             forward_file = file2
             reverse_file = file1
     
-    # Pattern 2: _1. / _2.
+    # Pattern 2: _1 / _2 (if _R1/_R2 didn't match)
+    elif (base1.endswith('_1') and base2.endswith('_2')):
+        base1_prefix = base1.rsplit('_', 1)[0]
+        base2_prefix = base2.rsplit('_', 1)[0]
+        if base1_prefix == base2_prefix:
+            patterns_valid = True
+            forward_file = file1
+            reverse_file = file2
+    elif (base2.endswith('_1') and base1.endswith('_2')):
+        base1_prefix = base1.rsplit('_', 1)[0]
+        base2_prefix = base2.rsplit('_', 1)[0]
+        if base1_prefix == base2_prefix:
+            patterns_valid = True
+            forward_file = file2
+            reverse_file = file1
+    
+    # Pattern 3: _1. / _2.
     elif '_1.' in file1 and '_2.' in file2:
         base1_prefix = file1.split('_1.')[0]
         base2_prefix = file2.split('_2.')[0]
@@ -386,7 +402,7 @@ def validate_paired_files(file_list: list) -> tuple:
             forward_file = file2
             reverse_file = file1
     
-    # Pattern 3: .1. / .2.
+    # Pattern 4: .1. / .2.
     elif '.1.' in file1 and '.2.' in file2:
         base1_prefix = file1.split('.1.')[0]
         base2_prefix = file2.split('.2.')[0]
@@ -407,7 +423,7 @@ def validate_paired_files(file_list: list) -> tuple:
             False,
             None,
             None,
-            "Selected files do not appear to be paired reads. Expected naming: *_R1/*_R2 or *_1/*_2"
+            "Selected files do not appear to be paired reads. Expected naming: *_R1/*_R2, *_1/*_2, or *.1./*.2."
         )
     
     return (True, forward_file, reverse_file, "")

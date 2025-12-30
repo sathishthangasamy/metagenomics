@@ -91,7 +91,7 @@ class MetagenomicsUI:
                                 with gr.Row():
                                     gcs_bucket = gr.Textbox(
                                         label="🪣 Bucket Name",
-                                        value=config.GCS_BROWSER_DEFAULT_BUCKET if config.GCS_BROWSER_DEFAULT_BUCKET else config.GCP_BUCKET_NAME,
+                                        value=config.GCS_BROWSER_DEFAULT_BUCKET or config.GCP_BUCKET_NAME,
                                         placeholder="my-metagenomics-bucket"
                                     )
                                 
