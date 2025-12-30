@@ -91,7 +91,7 @@ class MetagenomicsUI:
                                 with gr.Row():
                                     gcs_bucket = gr.Textbox(
                                         label="🪣 Bucket Name",
-                                        value=config.GCS_BROWSER_DEFAULT_BUCKET or config.GCP_BUCKET_NAME,
+                                        value=config.GCS_BROWSER_DEFAULT_BUCKET if config.GCS_BROWSER_DEFAULT_BUCKET else config.GCP_BUCKET_NAME,
                                         placeholder="my-metagenomics-bucket"
                                     )
                                 
@@ -369,7 +369,16 @@ class MetagenomicsUI:
                 )
             
             # Get actual file paths from mapping
-            selected_paths = [self.gcs_file_mapping.get(f, f) for f in gcs_files]
+            selected_paths = []
+            for f in gcs_files:
+                path = self.gcs_file_mapping.get(f)
+                if path is None:
+                    return (
+                        f"❌ Error: Could not find file path for '{f}'. Please refresh the file list.",
+                        gr.Button(visible=True),
+                        gr.Button(visible=False)
+                    )
+                selected_paths.append(path)
             
             # Validate paired files
             is_valid, forward_file, reverse_file, error_msg = validate_paired_files(selected_paths)
