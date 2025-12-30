@@ -60,6 +60,11 @@ UI_DIR = BASE_DIR / "ui"
 GCP_DIR = BASE_DIR / "gcp"
 PIPELINE_DIR = BASE_DIR / "pipeline"
 
+# GCS Browser Configuration
+GCS_BROWSER_DEFAULT_BUCKET = os.getenv("GCS_DEFAULT_BUCKET", "")
+GCS_BROWSER_DEFAULT_PREFIX = os.getenv("GCS_DEFAULT_PREFIX", "samples/")
+GCS_ALLOWED_EXTENSIONS = [".fq.gz", ".fastq.gz", ".fq", ".fastq"]
+
 # Gradio Configuration
 GRADIO_SERVER_NAME = "0.0.0.0"
 GRADIO_SERVER_PORT = 7860

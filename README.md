@@ -44,6 +44,7 @@ We now offer a modern, user-friendly web interface powered by Gradio that allows
 
 - **🎨 Futuristic Light Theme** - Clean, modern interface
 - **📤 Easy File Upload** - Drag & drop your FASTQ files
+- **☁️ GCS File Browser (NEW!)** - Select large files directly from Google Cloud Storage
 - **⚙️ Configurable Pipeline** - Enable/disable steps, adjust parameters
 - **☁️ Cloud-Powered** - Runs on Google Cloud Platform VMs
 - **📊 Real-time Monitoring** - Track pipeline progress live
@@ -97,11 +98,48 @@ The web interface will be available at `http://localhost:7860`
 
 ## Using the Web UI
 
+### Upload Method 1: Upload from Computer
+
 1. **Upload Samples**: Upload your paired-end FASTQ files (.fq.gz or .fastq.gz)
 2. **Configure Pipeline**: Adjust thread count, minimum contig length, and select pipeline steps
 3. **Launch**: Click "🚀 Launch Pipeline" to start the analysis on GCP
 4. **Monitor**: Switch to the "Monitor Progress" tab to track the pipeline
 5. **Download Results**: Once complete, download results from the "Results" tab
+
+### Upload Method 2: Select from Google Cloud Storage (NEW!)
+
+For large files (25GB+), you can skip browser upload and select files directly from your GCS bucket:
+
+#### 1. Upload Files to GCS
+
+First, upload your FASTQ files to Google Cloud Storage using `gsutil`:
+
+```bash
+# Upload files to your bucket
+gsutil cp sample_R1.fq.gz gs://your-bucket-name/samples/
+gsutil cp sample_R2.fq.gz gs://your-bucket-name/samples/
+
+# Or upload an entire directory
+gsutil -m cp -r /path/to/samples/* gs://your-bucket-name/samples/
+```
+
+**Benefits:**
+- ✅ Much faster than browser upload (uses Google's internal network)
+- ✅ No browser timeout issues
+- ✅ Resume interrupted uploads automatically
+- ✅ Parallel uploads for multiple files
+
+#### 2. Use the GCS File Browser
+
+1. In the web UI, select **"Select from Google Cloud Storage"**
+2. Enter your **bucket name** (defaults to the configured bucket)
+3. Enter the **path/prefix** to filter files (e.g., `samples/`)
+4. Click **🔄 Refresh** to load the file list
+5. **Select both R1 and R2 files** from the checkbox list
+   - Files must follow paired-end naming: `*_R1/*_R2`, `*_1/*_2`, or `*.1./*.2.`
+6. Click **🚀 Launch Pipeline**
+
+The pipeline will download files directly from GCS to the VM - much faster than uploading through your browser!
 
 ## Deploy to Hugging Face Spaces (Free Hosting)
 
